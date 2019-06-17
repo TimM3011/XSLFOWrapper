@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Export generator="Cache" version="25" zv="Cache for Windows (x86-64) 2016.2.1 (Build 803U)" ts="2017-02-07 11:56:19">
+<Export generator="Cache" version="25" zv="Cache for Windows (x86-64) 2018.1.2 (Build 309U)" ts="2019-06-17 08:44:02">
 <Class name="ZEN.Report.FOWrapper">
 <Description><![CDATA[
 This ZEN Report class is a wrapper for any XSL-FO files, from which you want to generate a PDF file using the ZEN Report framework and
@@ -20,7 +20,7 @@ This ZEN Report class is a wrapper for any XSL-FO files, from which you want to 
  <a href="%25CSP.Documatic.cls?PAGE=CLASS&CLASSNAME=%25ZEN.Report.reportPage#GenerateReport">GenerateReport()</a> 
  or the <a href="%25CSP.Documatic.cls?PAGE=CLASS&CLASSNAME=%25ZEN.Report.reportPage#AsynchGenerateReport">AsynchGenerateReport()</a> method!</p>]]></Description>
 <Super>%ZEN.Report.reportPage</Super>
-<TimeChanged>64321,42883.504221</TimeChanged>
+<TimeChanged>65181,31401.929337</TimeChanged>
 <TimeCreated>64321,42883.504221</TimeCreated>
 
 <Parameter name="DEFAULTMODE">
@@ -41,6 +41,10 @@ Default value for the <property>CallbackClass</property> property. This can be s
 Default value for the <property>CallbackMethod</property> property. This can be set in subclasses!]]></Description>
 </Parameter>
 
+<Parameter name="ENCODING">
+<Default>Windows-1252</Default>
+</Parameter>
+
 <Property name="FOFilename">
 <Description><![CDATA[
 This is the full server-side path of the XSL-FO file. If it's not empty, the referenced file must exists 
@@ -50,6 +54,12 @@ and referring a valid class and method name, then this is ignored.</p>]]></Descr
 <Type>%String</Type>
 <Parameter name="MAXLEN"/>
 <Parameter name="ZENURL" value="FOFILENAME"/>
+</Property>
+
+<Property name="FOStream">
+<Description>
+this property is a stream object to allow the stream coming in to be converted to a file stream for pdf generation</Description>
+<Type>%Stream.Object</Type>
 </Property>
 
 <Property name="CallbackClass">
@@ -87,14 +97,16 @@ and before it is run.</Description>
 			Set tSC = ex.AsStatus()
 		}
 	}
-	Else {
-		Set fostream = ##class(%Stream.FileCharacter).%New()
-		Set tSC = fostream.LinkToFile(..FOFilename)
+	Elseif (..FOFilename '= "") {
+		Set ..FOStream = ##class(%Stream.FileCharacter).%New()
+		Set tSC = ..FOStream.LinkToFile(..FOFilename)
 	}
+	Else
+	{}
 	
 	If $$$ISOK(tSC) {
 		// TODO: automatically append XSLT frame around the XSL-FO file.
-		Set ..toxslfostream = ..TransformFO2XSL(.fostream)
+		Set ..toxslfostream = ..TransformFO2XSL(..FOStream)
 		Do ..toxslfostream.Rewind()
 	}
 		
@@ -180,6 +192,53 @@ This method can be used to test background generation of the PDF from a callback
 ]]></Implementation>
 </Method>
 
+<Method name="TestProducePDFFromFOStream">
+<Description><![CDATA[
+This method can be used to test pdf generation from a stream
+<var>pOutputFile</var> is the (server-side) full path of the expected output file (PDF).<br/>
+<var>pXLFOStream</var> is the stream being passed through either from a message request or message response.<br/>
+<var>pDisplayLog</var> is 0 by default, if it's set to 1, the output file will contain the output of the FOP log instead of the PDF.</br>
+<var>pRenderServer</var> is empty by default. If a HotJVM Render Server is used to boost the performance of the PDF generation, 
+ then this argument has to contain the port number of the configured render server. For deatailed documentation see the
+ <a href="http://docs.intersystems.com/latest/csp/docbook/DocBook.UI.Page.cls?KEY=GRPT_report_running#GRPT_renderserver">HotJVM Render Server documentation!</a>
+</p>]]></Description>
+<ClassMethod>1</ClassMethod>
+<FormalSpec>pOutputFile:%String,pXLFOStream:%Stream.Object,pDisplayLog:%Boolean=0,pRenderServer:%String=""</FormalSpec>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+	Set tSC = $$$OK
+	
+	Set report = ..%New()
+	Set report.FOStreamString = pXLFOStream
+	
+	Set tSC = report.GenerateReport(pOutputFile, 2, pDisplayLog, pRenderServer)
+	Quit tSC
+]]></Implementation>
+</Method>
+
+<Method name="TestProducePDFStreamFromFOStream">
+<Description><![CDATA[
+This method can be used to test the generation of a pdf from a stream  to a pdf stream it returns a pdf stream
+<var>pXLFOStream</var> is the stream being passed through either from a message request or message response.<br/>
+<var>pDisplayLog</var> is 0 by default, if it's set to 1, the output file will contain the output of the FOP log instead of the PDF.</br>
+ <a href="http://docs.intersystems.com/latest/csp/docbook/DocBook.UI.Page.cls?KEY=GRPT_report_running#GRPT_renderserver">HotJVM Render Server documentation!</a>
+</p>]]></Description>
+<ClassMethod>1</ClassMethod>
+<FormalSpec>pXLFOStream:%Stream.Object,pMode:%Integer=2,pDisplayLog:%Boolean=0</FormalSpec>
+<ReturnType>%Stream.FileCharacter</ReturnType>
+<Implementation><![CDATA[
+	Set tSC = $$$OK
+	set pstream=##class(%Stream.FileCharacter).%New()
+	Set report = ..%New()
+	Set report.FOStreamString = pXLFOStream
+	
+	Set tSC = report.GenerateReportToStream(.pstream, pMode, pDisplayLog)
+	if (tSC){
+	Quit pstream
+	}
+]]></Implementation>
+</Method>
+
 <Method name="FO2PDFCallback">
 <Description><![CDATA[
 Sample callback method used by the <property>TestFO2PDFFromMethod</property> method.]]></Description>
@@ -237,7 +296,7 @@ Appends the XSLT frame around the original XSL-FO stream, to make it usable with
 	
 	Do xslStream.WriteLine($Select(
 		xmlHeader '= "": xmlHeader,
-		1: "<?xml version=""1.0"" encoding=""utf-8""?>"))
+		1: "<?xml version=""1.0"" encoding=""Windows-1252""?>"))
 	Do xslStream.WriteLine("<xsl:stylesheet version=""1.0"" xmlns:xsl=""http://www.w3.org/1999/XSL/Transform"">")
 	Do xslStream.WriteLine("<xsl:template match=""/"">")
 	Do xslStream.Write(first100)
